@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.streamlit/
+
+# Generated review artifacts (per-researcher progress/output) - not source.
+output/*
+!output/.gitkeep
