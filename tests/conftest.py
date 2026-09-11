@@ -10,6 +10,7 @@ def sample_csv(tmp_path):
             "class_name": ["wheat", "non_wheat", "wheat"],
             "label": [1, 0, 1],
             "region": ["Punjab", "Punjab", "Punjab"],
+            "year": [2021, 2021, 2021],
             "NDVI_1": [0.1, 0.2, 0.3],
             "NDVI_2": [0.4, 0.5, 0.6],
             "NDVI_3": [0.7, 0.8, 0.9],

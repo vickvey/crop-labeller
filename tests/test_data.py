@@ -12,6 +12,8 @@ def test_load_csv_detects_schema(sample_csv):
     assert schema.label_text_column == "class_name"
     assert schema.label_text_map == {0: "non_wheat", 1: "wheat"}
     assert schema.original_columns == list(df.columns)
+    assert schema.region_column == "region"
+    assert schema.year_column == "year"
 
 
 def test_label_options_and_display(sample_csv):

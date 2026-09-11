@@ -20,6 +20,14 @@ LABEL_TEXT_COL_CANDIDATES = ("class_name", "class_label")
 # A stable per-row identifier, in priority order.
 ID_COL_CANDIDATES = ("sample_id", "id", "row_id")
 
+# A column identifying the geographic region a row belongs to, used to look
+# up a matching precomputed reference NDVI curve (see reference.py).
+REGION_COL_CANDIDATES = ("region",)
+
+# A column identifying the season/year a row belongs to, used together with
+# region to look up a matching precomputed reference NDVI curve.
+YEAR_COL_CANDIDATES = ("year",)
+
 
 @dataclass(frozen=True)
 class CsvSchema:
@@ -39,6 +47,8 @@ class CsvSchema:
     label_text_column: str | None
     # label value -> most common companion text value, e.g. {0: "non_wheat", 1: "wheat"}
     label_text_map: dict[object, str]
+    region_column: str | None
+    year_column: str | None
 
 
 def list_csv_files(data_dir: Path) -> list[Path]:
@@ -98,6 +108,9 @@ def load_csv(path: Path) -> tuple[pd.DataFrame, CsvSchema]:
         )
         label_text_map = grouped.to_dict()
 
+    region_column = _first_present(columns, REGION_COL_CANDIDATES)
+    year_column = _first_present(columns, YEAR_COL_CANDIDATES)
+
     schema = CsvSchema(
         columns=columns,
         original_columns=original_columns,
@@ -107,6 +120,8 @@ def load_csv(path: Path) -> tuple[pd.DataFrame, CsvSchema]:
         label_column=label_column,
         label_text_column=label_text_column,
         label_text_map=label_text_map,
+        region_column=region_column,
+        year_column=year_column,
     )
     return df, schema
 

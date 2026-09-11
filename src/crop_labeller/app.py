@@ -9,11 +9,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from crop_labeller.data import CsvSchema, label_display, label_options, list_csv_files, load_csv
+from crop_labeller.ndvi_periods import NDVI_PERIODS, period_short_label
+from crop_labeller.reference import load_region_reference
 from crop_labeller.state import ReviewState, write_outputs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+
 
 st.set_page_config(page_title="Crop Labeller", page_icon="🌾", layout="wide")
 
@@ -21,6 +24,11 @@ st.set_page_config(page_title="Crop Labeller", page_icon="🌾", layout="wide")
 @st.cache_data(show_spinner=False)
 def _cached_load_csv(path_str: str, mtime: float) -> tuple[pd.DataFrame, CsvSchema]:
     return load_csv(Path(path_str))
+
+
+@st.cache_data(show_spinner=False)
+def _cached_region_reference(region: str, year: str) -> pd.DataFrame | None:
+    return load_region_reference(region, year)
 
 
 def get_review_state(csv_path: Path, total_rows: int) -> ReviewState:
@@ -50,30 +58,120 @@ def render_metadata_panel(row: pd.Series, schema: CsvSchema) -> None:
     st.dataframe(context_df, hide_index=True, width="stretch", height=min(38 * len(context_cols) + 38, 320))
 
 
-def render_ndvi_plot(row: pd.Series, schema: CsvSchema, row_id: object) -> None:
+def render_ndvi_plot(
+    row: pd.Series, schema: CsvSchema, row_id: object, reference_df: pd.DataFrame | None = None
+) -> None:
     x = list(range(1, len(schema.ndvi_columns) + 1))
     y = [row[c] for c in schema.ndvi_columns]
+
+    # The Oct-to-May fortnight mapping only makes sense for the standard
+    # 14-step wheat season; anything else falls back to plain step numbers.
+    use_periods = len(schema.ndvi_columns) == len(NDVI_PERIODS)
+    season_start_year = next((row[c] for c in row.index if c.lower() == "year"), None)
+
+    # Plot against the period labels themselves (as a categorical axis)
+    # rather than bare step numbers. That gives every trace a shared x
+    # position to align on, which is what lets a single hover show a
+    # vertical line cutting through the sample, the regional mean, and the
+    # std-dev band all at once, labelled by the period being pointed at.
+    x_labels = [period_short_label(i) if use_periods else str(i) for i in x]
+    year_suffix = f", {int(season_start_year) + 1}" if use_periods and season_start_year is not None else ""
+
     fig = go.Figure()
+
+    show_legend = reference_df is not None
+    if reference_df is not None:
+        ref_x = reference_df["step"].tolist()
+        ref_labels = [period_short_label(i) if use_periods else str(i) for i in ref_x]
+        upper = (reference_df["ndvi_mean"] + reference_df["ndvi_std"]).tolist()
+        lower = (reference_df["ndvi_mean"] - reference_df["ndvi_std"]).tolist()
+        fig.add_trace(
+            go.Scatter(
+                x=ref_labels, y=upper, mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=ref_labels,
+                y=lower,
+                mode="lines",
+                line=dict(width=0),
+                fill="tonexty",
+                fillcolor="rgba(120,120,120,0.18)",
+                name="±1 std range",
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=ref_labels,
+                y=reference_df["ndvi_mean"].tolist(),
+                mode="lines",
+                line=dict(color="#666666", width=2, dash="dash"),
+                name="Regional mean",
+                hovertemplate="Regional mean NDVI %{y:.3f}<extra></extra>",
+            )
+        )
+
     fig.add_trace(
         go.Scatter(
-            x=x,
+            x=x_labels,
             y=y,
             mode="lines+markers",
             line=dict(color="#2e7d32", width=3),
             marker=dict(size=7),
-            hovertemplate="Time step %{x}<br>NDVI %{y:.3f}<extra></extra>",
+            name="This sample",
+            hovertemplate="NDVI %{y:.3f}<extra></extra>",
         )
     )
     fig.update_layout(
         title=f"NDVI time series — sample {row_id}",
-        xaxis_title="NDVI time steps",
+        xaxis_title="Wheat-season fortnight" if use_periods else "NDVI time steps",
         yaxis_title="NDVI values",
-        xaxis=dict(tickmode="linear", tick0=x[0], dtick=1, range=[x[0] - 0.3, x[-1] + 0.3]),
+        xaxis=dict(
+            type="category",
+            categoryorder="array",
+            categoryarray=x_labels,
+            tickangle=-45,
+            showspikes=True,
+            spikemode="across",
+            spikesnap="hovered data",  # jump to the whole fortnight slot, not the raw cursor pixel
+            spikethickness=2,  # a real crosshair, not a fake band — spikes draw *above*
+            # traces, so anything thick enough to look like a shaded region would
+            # paint over the curves it's meant to help you read.
+            spikedash="solid",
+            spikecolor="rgba(46,125,50,0.7)",
+        ),
         yaxis_range=[-0.05, 1.0],
         template="plotly_white",
-        height=360,
+        height=560,
         margin=dict(l=40, r=20, t=50, b=40),
+        showlegend=show_legend,
+        hovermode="x unified",
+        hoverlabel=dict(font_size=13),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.35,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=12),
+        ),
     )
+    if use_periods and season_start_year is not None:
+        # x unified's shared header shows the short category label (e.g.
+        # "Jan (1st half)"); this note spells out the actual calendar year
+        # split it represents, once, instead of cluttering every hover.
+        fig.add_annotation(
+            text=f"Oct–Dec {int(season_start_year)} · Jan–May{year_suffix}",
+            xref="paper",
+            yref="paper",
+            x=1,
+            y=1.08,
+            showarrow=False,
+            font=dict(size=11, color="#888888"),
+            xanchor="right",
+        )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -84,7 +182,7 @@ def inject_css() -> None:
         html, body, [data-testid="stAppViewContainer"] { font-size: 17px; }
 
         [data-testid="stMainBlockContainer"], .block-container {
-            max-width: 1200px;
+            max-width: 1440px;
             margin: 0 auto;
             padding-top: 2rem;
         }
@@ -199,11 +297,11 @@ def main() -> None:
     row_id = row[schema.id_column]
     is_reviewed = state.is_reviewed(row_id)
 
-    # --- Compact top bar: filter, row status, jump-to-row — one line, no
-    # scrolling needed to reach it. Previous/Next/Save live further down,
-    # right next to the plot and label controls, since that's where your
-    # eyes and mouse already are while reviewing a row. ---
-    mode_col, status_col, jump_col = st.columns([1.4, 2.2, 1])
+    # --- Compact top bar: just the filter + row status, one line, no
+    # scrolling needed to reach it. Previous/Next/Save/Jump-to-row live
+    # further down, right next to the plot and label controls, since
+    # that's where your eyes and mouse already are while reviewing a row. ---
+    mode_col, status_col = st.columns([1.4, 2.6])
     with mode_col:
         st.caption("Show")
         nav_mode = st.radio(
@@ -225,24 +323,24 @@ def main() -> None:
         if nav_mode != "All" and row_idx in filtered:
             status_line += f"  \n{nav_mode.lower()} {filtered.index(row_idx) + 1} / {len(filtered)}"
         st.markdown(status_line)
-    with jump_col:
-        st.caption("Jump to row")
-        st.number_input(
-            "Jump to row",
-            min_value=1,
-            max_value=total_rows,
-            key="jump_input",
-            on_change=jump_callback,
-            label_visibility="collapsed",
-        )
 
     if not filtered:
         st.info("No rows match the current filter.")
 
     # --- Plot + review controls, side by side, so both fit on screen at once. ---
-    plot_col, review_col = st.columns([2, 1])
+    region_value = row[schema.region_column] if schema.region_column else None
+    year_value = row[schema.year_column] if schema.year_column else None
+    reference_df = (
+        _cached_region_reference(str(region_value), str(year_value))
+        if region_value is not None and year_value is not None
+        else None
+    )
+
+    plot_col, review_col = st.columns([2.8, 1])
     with plot_col:
-        render_ndvi_plot(row, schema, row_id)
+        render_ndvi_plot(row, schema, row_id, reference_df)
+        if region_value is not None and year_value is not None and reference_df is None:
+            st.caption(f"No reference available for {region_value} ({year_value}).")
         with st.expander("Other fields"):
             render_metadata_panel(row, schema)
 
@@ -274,7 +372,7 @@ def main() -> None:
             height=70,
         )
 
-        prev_btn_col, save_col, next_btn_col = st.columns([1, 1.5, 1])
+        prev_btn_col, next_btn_col = st.columns(2)
         with prev_btn_col:
             if st.button("⬅ Prev", disabled=prev_target is None, width="stretch"):
                 go_to(prev_target)
@@ -283,15 +381,23 @@ def main() -> None:
             if st.button("Next ➡", disabled=next_target is None, width="stretch"):
                 go_to(next_target)
                 st.rerun()
-        with save_col:
-            if st.button("💾 Save", type="primary", width="stretch"):
-                state.set_review(row_id, original_label, chosen_label, comment)
-                state.save()
-                write_outputs(df, schema, state, OUTPUT_DIR, selected_path)
-                st.toast(f"Saved sample {row_id}", icon="✅")
-                if next_target is not None:
-                    go_to(next_target)
-                st.rerun()
+
+        if st.button("💾 Save", type="primary", width="stretch"):
+            state.set_review(row_id, original_label, chosen_label, comment)
+            state.save()
+            write_outputs(df, schema, state, OUTPUT_DIR, selected_path)
+            st.toast(f"Saved sample {row_id}", icon="✅")
+            if next_target is not None:
+                go_to(next_target)
+            st.rerun()
+
+        st.number_input(
+            "Jump to row",
+            min_value=1,
+            max_value=total_rows,
+            key="jump_input",
+            on_change=jump_callback,
+        )
 
 
 if __name__ == "__main__":
