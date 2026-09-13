@@ -14,6 +14,19 @@ def test_load_csv_detects_schema(sample_csv):
     assert schema.original_columns == list(df.columns)
     assert schema.region_column == "region"
     assert schema.year_column == "year"
+    assert schema.ndvi_smooth_columns == []
+    assert schema.confidence_column is None
+    assert schema.flag_column is None
+
+
+def test_load_csv_detects_smoothing_and_confidence_scoring(sample_csv_with_scoring):
+    df, schema = load_csv(sample_csv_with_scoring)
+
+    assert schema.ndvi_smooth_columns == ["NDVI_smooth_1", "NDVI_smooth_2", "NDVI_smooth_3"]
+    assert schema.confidence_column == "label_confidence_score"
+    assert schema.flag_column == "flag"
+    # Smoothed/scoring columns must not be mistaken for the raw NDVI series.
+    assert schema.ndvi_columns == ["NDVI_1", "NDVI_2", "NDVI_3"]
 
 
 def test_label_options_and_display(sample_csv):

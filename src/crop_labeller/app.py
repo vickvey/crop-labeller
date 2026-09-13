@@ -14,8 +14,24 @@ from crop_labeller.reference import load_region_reference
 from crop_labeller.state import ReviewState, write_outputs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DATA_DIR = PROJECT_ROOT / "data"
+# Input CSVs live under data/csv/ — data/ also holds plots/ (diagnostic PNGs
+# from the outlier-scoring pipeline) and a confidence_check_summary_*.csv
+# that aren't per-row datapoint files, so we scan the csv/ subfolder
+# specifically rather than data/ itself.
+DATA_DIR = PROJECT_ROOT / "data" / "csv"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+
+# Human-readable explanations for the outlier-scoring pipeline's flag values.
+# None means "nothing suspicious, don't show a warning".
+FLAG_DESCRIPTIONS: dict[str, str | None] = {
+    "ok": None,
+    "labeled_wheat_atypical_profile": (
+        "Labeled **wheat**, but its NDVI shape looks atypical for wheat in this region/year."
+    ),
+    "labeled_nonwheat_wheatlike_profile": (
+        "Labeled **non-wheat**, but its NDVI shape looks like a typical wheat curve."
+    ),
+}
 
 
 st.set_page_config(page_title="Crop Labeller", page_icon="🌾", layout="wide")
@@ -46,10 +62,27 @@ def format_value(value: object) -> str:
     return str(value)
 
 
+def confidence_badge(score: float) -> str:
+    pct = f"{score * 100:.0f}%"
+    if score >= 0.7:
+        return f":green[{pct} confident]"
+    if score >= 0.4:
+        return f":orange[{pct} confident]"
+    return f":red[{pct} confident]"
+
+
 def render_metadata_panel(row: pd.Series, schema: CsvSchema) -> None:
-    skip = set(schema.ndvi_columns) | {schema.id_column, schema.label_column}
+    skip = (
+        set(schema.ndvi_columns)
+        | set(schema.ndvi_smooth_columns)
+        | {schema.id_column, schema.label_column}
+    )
     if schema.label_text_column:
         skip.add(schema.label_text_column)
+    if schema.confidence_column:
+        skip.add(schema.confidence_column)
+    if schema.flag_column:
+        skip.add(schema.flag_column)
     context_cols = [c for c in schema.original_columns if c not in skip]
     if not context_cols:
         return
@@ -77,9 +110,14 @@ def render_ndvi_plot(
     x_labels = [period_short_label(i) if use_periods else str(i) for i in x]
     year_suffix = f", {int(season_start_year) + 1}" if use_periods and season_start_year is not None else ""
 
+    # Only trust the smoothed series if it's the same length as the raw one
+    # (i.e. actually aligned, step for step) — otherwise skip it silently.
+    has_smoothed = len(schema.ndvi_smooth_columns) == len(schema.ndvi_columns) and schema.ndvi_smooth_columns
+    smooth_y = [row[c] for c in schema.ndvi_smooth_columns] if has_smoothed else None
+
     fig = go.Figure()
 
-    show_legend = reference_df is not None
+    show_legend = reference_df is not None or has_smoothed
     if reference_df is not None:
         ref_x = reference_df["step"].tolist()
         ref_labels = [period_short_label(i) if use_periods else str(i) for i in ref_x]
@@ -113,6 +151,18 @@ def render_ndvi_plot(
             )
         )
 
+    if smooth_y is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=x_labels,
+                y=smooth_y,
+                mode="lines",
+                line=dict(color="#1565c0", width=2.5),
+                name="Smoothed (Savitzky–Golay)",
+                hovertemplate="Smoothed NDVI %{y:.3f}<extra></extra>",
+            )
+        )
+
     fig.add_trace(
         go.Scatter(
             x=x_labels,
@@ -120,7 +170,7 @@ def render_ndvi_plot(
             mode="lines+markers",
             line=dict(color="#2e7d32", width=3),
             marker=dict(size=7),
-            name="This sample",
+            name="Original",
             hovertemplate="NDVI %{y:.3f}<extra></extra>",
         )
     )
@@ -357,6 +407,16 @@ def main() -> None:
             default_index = 0
 
         st.caption(f"Original label: {label_display(schema, original_label)}")
+
+        if schema.confidence_column:
+            confidence_value = row[schema.confidence_column]
+            st.markdown(f"Label confidence: {confidence_badge(confidence_value)}")
+        if schema.flag_column:
+            flag_value = row[schema.flag_column]
+            flag_message = FLAG_DESCRIPTIONS.get(flag_value, f"Flagged: `{flag_value}`")
+            if flag_message:
+                st.warning(flag_message, icon="⚠️")
+
         chosen_label = st.radio(
             "Label",
             options=options,

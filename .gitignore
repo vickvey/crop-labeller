@@ -11,6 +11,12 @@ output/*
 # Internal task prompts - not meant to be published, kept local only.
 prompts/
 
+# Pipeline-generated input data - large, regenerated locally, not source.
+# The small aggregate summary CSV directly under data/ is kept (not
+# matched by these directory-scoped patterns).
+data/csv/
+data/plots/
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python

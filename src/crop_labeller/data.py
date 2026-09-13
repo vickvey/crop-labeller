@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 NDVI_COL_RE = re.compile(r"^NDVI_(\d+)$", re.IGNORECASE)
+NDVI_SMOOTH_COL_RE = re.compile(r"^NDVI_smooth_(\d+)$", re.IGNORECASE)
 
 # Columns that plausibly hold the "class" a researcher is reviewing, in
 # priority order. The first match present in the CSV is used.
@@ -28,6 +29,11 @@ REGION_COL_CANDIDATES = ("region",)
 # region to look up a matching precomputed reference NDVI curve.
 YEAR_COL_CANDIDATES = ("year",)
 
+# Outlier/confidence scoring columns produced by the shift-tolerant
+# profile-matching pipeline (score_wheat_profile_confidence.py), if present.
+CONFIDENCE_COL_CANDIDATES = ("label_confidence_score",)
+FLAG_COL_CANDIDATES = ("flag",)
+
 
 @dataclass(frozen=True)
 class CsvSchema:
@@ -41,6 +47,10 @@ class CsvSchema:
     """Exact column set/order of the source CSV, used when writing outputs."""
 
     ndvi_columns: list[str]
+    ndvi_smooth_columns: list[str]
+    """Savitzky-Golay smoothed counterpart of ndvi_columns, e.g. NDVI_smooth_1..N.
+    Empty if the CSV doesn't have them (older exports)."""
+
     id_column: str
     id_column_is_synthetic: bool
     label_column: str
@@ -49,6 +59,12 @@ class CsvSchema:
     label_text_map: dict[object, str]
     region_column: str | None
     year_column: str | None
+    confidence_column: str | None
+    """label_confidence_score in [0, 1]: how well this row's label matches its
+    NDVI shape (per the shift-tolerant profile-matching scoring), if present."""
+    flag_column: str | None
+    """Categorical outlier flag ("ok", "labeled_wheat_atypical_profile",
+    "labeled_nonwheat_wheatlike_profile"), if present."""
 
 
 def list_csv_files(data_dir: Path) -> list[Path]:
@@ -65,8 +81,8 @@ def _first_present(columns: list[str], candidates: tuple[str, ...]) -> str | Non
     return None
 
 
-def _ndvi_columns(columns: list[str]) -> list[str]:
-    matches = [(c, NDVI_COL_RE.match(c)) for c in columns]
+def _columns_matching(columns: list[str], pattern: re.Pattern) -> list[str]:
+    matches = [(c, pattern.match(c)) for c in columns]
     found = [(c, int(m.group(1))) for c, m in matches if m]
     found.sort(key=lambda pair: pair[1])
     return [c for c, _ in found]
@@ -77,12 +93,13 @@ def load_csv(path: Path) -> tuple[pd.DataFrame, CsvSchema]:
     original_columns = list(df.columns)
     columns = list(df.columns)
 
-    ndvi_columns = _ndvi_columns(columns)
+    ndvi_columns = _columns_matching(columns, NDVI_COL_RE)
     if not ndvi_columns:
         raise ValueError(
             f"No NDVI_<n> columns found in {path.name}. "
             "Expected columns like NDVI_1, NDVI_2, ..."
         )
+    ndvi_smooth_columns = _columns_matching(columns, NDVI_SMOOTH_COL_RE)
 
     id_column = _first_present(columns, ID_COL_CANDIDATES)
     id_column_is_synthetic = id_column is None
@@ -110,11 +127,14 @@ def load_csv(path: Path) -> tuple[pd.DataFrame, CsvSchema]:
 
     region_column = _first_present(columns, REGION_COL_CANDIDATES)
     year_column = _first_present(columns, YEAR_COL_CANDIDATES)
+    confidence_column = _first_present(columns, CONFIDENCE_COL_CANDIDATES)
+    flag_column = _first_present(columns, FLAG_COL_CANDIDATES)
 
     schema = CsvSchema(
         columns=columns,
         original_columns=original_columns,
         ndvi_columns=ndvi_columns,
+        ndvi_smooth_columns=ndvi_smooth_columns,
         id_column=id_column,
         id_column_is_synthetic=id_column_is_synthetic,
         label_column=label_column,
@@ -122,6 +142,8 @@ def load_csv(path: Path) -> tuple[pd.DataFrame, CsvSchema]:
         label_text_map=label_text_map,
         region_column=region_column,
         year_column=year_column,
+        confidence_column=confidence_column,
+        flag_column=flag_column,
     )
     return df, schema
 
