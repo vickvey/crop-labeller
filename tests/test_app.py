@@ -147,6 +147,58 @@ def test_unsaved_change_indicator_appears_and_clears_on_save():
         assert not any("Unsaved change" in c.value for c in at.caption)
 
 
+def test_label_background_tint_tracks_selection_and_is_gated_on_wheat_convention():
+    df = pd.DataFrame(
+        {
+            "sample_id": [1, 2],
+            "label": [0, 1],
+            "class_name": ["non_wheat", "wheat"],
+            "region": ["Punjab"] * 2,
+            "year": [2021] * 2,
+            "NDVI_1": [0.1, 0.1],
+        }
+    )
+    with temp_input_csv("zzz_test_label_bg.csv", df):
+        at = AppTest.from_file(str(APP_PATH))
+        at.run(timeout=30)
+        _select(at, "zzz_test_label_bg.csv")
+
+        def bg_color():
+            for m in at.markdown:
+                if "stAppViewContainer" in m.value and "background-color" in m.value:
+                    return m.value
+            return None
+
+        assert "#fdf2f2" in bg_color()  # row 1 is label=0 (non-wheat) -> pale red
+
+        label_radio = [r for r in at.radio if r.label == "Label"][0]
+        label_radio.set_value(1).run(timeout=30)
+        assert not at.exception
+        assert "#f2f9f2" in bg_color()  # switched to label=1 (wheat) -> pale green
+
+
+def test_label_background_tint_skipped_for_non_wheat_convention_dataset():
+    df = pd.DataFrame(
+        {
+            "sample_id": [1, 2],
+            "label": [0, 1],
+            "class_name": ["not_barley", "barley"],
+            "region": ["Punjab"] * 2,
+            "year": [2021] * 2,
+            "NDVI_1": [0.1, 0.1],
+        }
+    )
+    with temp_input_csv("zzz_test_label_bg_other.csv", df):
+        at = AppTest.from_file(str(APP_PATH))
+        at.run(timeout=30)
+        _select(at, "zzz_test_label_bg_other.csv")
+
+        assert not at.exception
+        assert not any(
+            "stAppViewContainer" in m.value and "background-color" in m.value for m in at.markdown
+        )
+
+
 def test_nan_confidence_and_flag_are_hidden_not_shown_as_nan():
     df = pd.DataFrame(
         {

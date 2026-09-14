@@ -72,6 +72,40 @@ def confidence_badge(score: float) -> str:
     return f":red[{pct} confident]"
 
 
+# Palest possible tints — a hint, not a highlight. Only meaningful for this
+# project's wheat(1)/non-wheat(0) convention, so it's gated on the label
+# text actually saying that (see inject_label_background) rather than just
+# assuming any 0/1-labelled dataset means the same thing.
+LABEL_BACKGROUND_TINTS = {1: "#f2f9f2", 0: "#fdf2f2"}  # pale green (wheat) / pale red (non-wheat)
+
+
+def inject_label_background(schema: CsvSchema, label_value: object) -> None:
+    """Tint the page background to reflect the *currently selected* label -
+    an at-a-glance confirmation of what's about to be saved. Light-mode
+    only: a pale wash would look wrong, not subtle, against a dark theme,
+    and there's no reliable way from here to tell dark mode was chosen
+    manually inside Streamlit rather than inherited from the OS.
+    """
+    if (
+        schema.label_text_map.get(1, "").lower() != "wheat"
+        or schema.label_text_map.get(0, "").lower() != "non_wheat"
+    ):
+        return
+    color = LABEL_BACKGROUND_TINTS.get(label_value)
+    if color is None:
+        return
+    st.markdown(
+        f"""
+        <style>
+        @media (prefers-color-scheme: light) {{
+            [data-testid="stAppViewContainer"] {{ background-color: {color}; }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def outlier_row_ids_for_percentile(
     df: pd.DataFrame, schema: CsvSchema, label_value: object, percentile: float
 ) -> tuple[set, int, int]:
@@ -566,6 +600,7 @@ def main() -> None:
             key=f"label_{row_id}",
             horizontal=True,
         )
+        inject_label_background(schema, chosen_label)
         comment = st.text_area(
             "Comment (optional)",
             value=default_comment,
