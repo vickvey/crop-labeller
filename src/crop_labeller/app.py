@@ -71,6 +71,29 @@ def confidence_badge(score: float) -> str:
     return f":red[{pct} confident]"
 
 
+def outlier_row_ids_for_percentile(
+    df: pd.DataFrame, schema: CsvSchema, label_value: object, percentile: float
+) -> tuple[set, int, int]:
+    """Row ids whose confidence score is in the bottom `percentile`% *within
+    rows sharing `label_value`* (the pipeline flags outliers separately per
+    label population, since a "confidently wheat" score isn't comparable to
+    a "confidently non-wheat" score on the same absolute scale).
+
+    Returns (matched_ids, matched_count, population_count).
+    """
+    population_mask = df[schema.label_column] == label_value
+    population_count = int(population_mask.sum())
+    scores = df.loc[population_mask, schema.confidence_column]
+    valid_scores = scores.dropna()
+    if valid_scores.empty:
+        return set(), 0, population_count
+
+    threshold = valid_scores.quantile(percentile / 100)
+    matched_mask = population_mask & df[schema.confidence_column].notna() & (df[schema.confidence_column] <= threshold)
+    matched_ids = set(df.loc[matched_mask, schema.id_column].tolist())
+    return matched_ids, int(matched_mask.sum()), population_count
+
+
 def render_metadata_panel(row: pd.Series, schema: CsvSchema) -> None:
     skip = (
         set(schema.ndvi_columns)
@@ -365,11 +388,12 @@ def main() -> None:
     row_id = row[schema.id_column]
     is_reviewed = state.is_reviewed(row_id)
 
-    # --- Compact top bar: just the filter + row status, one line, no
-    # scrolling needed to reach it. Previous/Next/Save/Jump-to-row live
-    # further down, right next to the plot and label controls, since
-    # that's where your eyes and mouse already are while reviewing a row. ---
-    mode_col, status_col = st.columns([1.4, 2.6])
+    # --- Compact top bar: Show-filter, confidence-outlier filter, and row
+    # status spread left/middle/right, one line, no scrolling needed to
+    # reach it. Previous/Next/Save/Jump-to-row live further down, right next
+    # to the plot and label controls, since that's where your eyes and
+    # mouse already are while reviewing a row. ---
+    mode_col, outlier_col, status_col = st.columns([1.2, 1.6, 1.8])
     with mode_col:
         st.caption("Show")
         nav_mode = st.radio(
@@ -380,7 +404,43 @@ def main() -> None:
             label_visibility="collapsed",
         )
 
+    outlier_row_ids: set | None = None
+    outlier_desc: str | None = None
+    if schema.confidence_column:
+        with outlier_col:
+            st.caption("Confidence")
+            enabled_now = st.session_state.get("outlier_filter_enabled", False)
+            pct_now = st.session_state.get("outlier_pct", 10)
+            pop_now = st.session_state.get("outlier_population", 1)
+            popover_label = "🎯 Confidence filter"
+            if enabled_now:
+                popover_label += f" · bottom {pct_now}% ({label_display(schema, pop_now)})"
+            with st.popover(popover_label):
+                enabled = st.checkbox("Filter by confidence outliers", key="outlier_filter_enabled")
+                if enabled:
+                    population_choice = st.radio(
+                        "Among",
+                        options=sorted(label_options(schema, df), reverse=True),  # wheat (1) first
+                        format_func=lambda v: label_display(schema, v),
+                        key="outlier_population",
+                    )
+                    pct = st.slider(
+                        "Bottom percentile by confidence",
+                        min_value=1,
+                        max_value=50,
+                        value=10,
+                        key="outlier_pct",
+                    )
+                    matched_ids, matched_count, population_count = outlier_row_ids_for_percentile(
+                        df, schema, population_choice, pct
+                    )
+                    outlier_row_ids = matched_ids
+                    outlier_desc = f"bottom {pct}% ({label_display(schema, population_choice)})"
+                    st.caption(f"{matched_count} of {population_count} rows match")
+
     filtered = filtered_indices(nav_mode)
+    if outlier_row_ids is not None:
+        filtered = [i for i in filtered if ids[i] in outlier_row_ids]
     prev_target = step(filtered, row_idx, -1)
     next_target = step(filtered, row_idx, 1)
 
@@ -388,9 +448,12 @@ def main() -> None:
         st.caption("Row")
         badge = ":green[Reviewed]" if is_reviewed else ":blue[Not yet reviewed]"
         status_line = f"**{row_idx + 1} / {total_rows}** &middot; sample `{row_id}` &middot; {badge}"
-        if nav_mode != "All" and row_idx in filtered:
-            status_line += f"  \n{nav_mode.lower()} {filtered.index(row_idx) + 1} / {len(filtered)}"
-        st.markdown(status_line)
+        if len(filtered) != total_rows and row_idx in filtered:
+            filter_parts = [p for p in (nav_mode.lower() if nav_mode != "All" else None, outlier_desc) if p]
+            status_line += (
+                f"  \n{' + '.join(filter_parts)}: {filtered.index(row_idx) + 1} / {len(filtered)}"
+            )
+        st.markdown(f'<div style="text-align:right">{status_line}</div>', unsafe_allow_html=True)
 
     if not filtered:
         st.info("No rows match the current filter.")

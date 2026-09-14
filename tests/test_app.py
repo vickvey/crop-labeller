@@ -57,6 +57,41 @@ def test_empty_csv_shows_friendly_error_not_a_crash():
         assert any("no data rows" in e.value for e in at.error)
 
 
+def test_confidence_outlier_filter_restricts_navigation():
+    # Descending confidence so the one low-confidence (matching) wheat row
+    # sits *last*, not at the default starting row — this actually
+    # exercises "Next skips past non-matching rows to reach it".
+    df = pd.DataFrame(
+        {
+            "sample_id": list(range(1, 21)),
+            "label": [1] * 10 + [0] * 10,
+            "region": ["Punjab"] * 20,
+            "year": [2021] * 20,
+            "NDVI_1": [0.1] * 20,
+            "label_confidence_score": [round(1.1 - 0.1 * i, 2) for i in range(1, 11)] + [0.9] * 10,
+            "flag": ["ok"] * 20,
+        }
+    )
+    with temp_input_csv("zzz_test_confidence_filter.csv", df):
+        at = AppTest.from_file(str(APP_PATH))
+        at.run(timeout=30)
+        _select(at, "zzz_test_confidence_filter.csv")
+
+        checkbox = at.checkbox[0]
+        checkbox.set_value(True).run(timeout=30)
+        assert not at.exception
+
+        # Default: wheat (label=1), bottom 10% of 10 wheat rows -> 1 row.
+        assert any("1 of 10 rows match" in c.value for c in at.caption)
+
+        buttons = {b.label: b for b in at.button}
+        buttons["Next ➡"].click().run(timeout=30)
+        assert not at.exception
+        # Landed on the single matching row; nowhere else to go.
+        buttons = {b.label: b for b in at.button}
+        assert buttons["Next ➡"].disabled
+
+
 def test_nan_confidence_and_flag_are_hidden_not_shown_as_nan():
     df = pd.DataFrame(
         {
