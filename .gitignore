@@ -13,8 +13,11 @@ prompts/
 
 # Pipeline-generated input data - large, regenerated locally, not source.
 # The small aggregate summary CSV directly under data/ is kept (not
-# matched by these directory-scoped patterns).
-data/csv/
+# matched by these directory-scoped patterns). data/csv/.gitkeep is kept
+# too, so the folder researchers are told to drop files into actually
+# exists after a fresh clone.
+data/csv/*
+!data/csv/.gitkeep
 data/plots/
 
 

@@ -267,6 +267,11 @@ def main() -> None:
     inject_css()
     st.title("🌾 Crop Labeller")
 
+    # Belt-and-braces: make sure these exist even if git didn't check out an
+    # empty data/csv/ (it's gitignored) or output/ was deleted by hand.
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     csv_files = list_csv_files(DATA_DIR)
     if not csv_files:
         st.warning(f"No CSV files found in `{DATA_DIR}`. Add one and reload the page.")
@@ -286,8 +291,21 @@ def main() -> None:
         st.session_state["_active_csv"] = selected_path.name
         st.session_state["row_idx"] = 0
 
-    df, schema = _cached_load_csv(str(selected_path), selected_path.stat().st_mtime)
+    try:
+        df, schema = _cached_load_csv(str(selected_path), selected_path.stat().st_mtime)
+    except (ValueError, OSError, pd.errors.ParserError) as e:
+        st.error(
+            f"Couldn't read `{selected_path.name}`: {e}\n\n"
+            "If more than one CSV is available, pick a different one above; "
+            "otherwise check that this file matches the expected format."
+        )
+        return
+
     total_rows = len(df)
+    if total_rows == 0:
+        st.error(f"`{selected_path.name}` has no data rows to review.")
+        return
+
     state = get_review_state(selected_path, total_rows)
 
     # --- Sidebar: progress ---
@@ -408,10 +426,9 @@ def main() -> None:
 
         st.caption(f"Original label: {label_display(schema, original_label)}")
 
-        if schema.confidence_column:
-            confidence_value = row[schema.confidence_column]
-            st.markdown(f"Label confidence: {confidence_badge(confidence_value)}")
-        if schema.flag_column:
+        if schema.confidence_column and pd.notna(row[schema.confidence_column]):
+            st.markdown(f"Label confidence: {confidence_badge(row[schema.confidence_column])}")
+        if schema.flag_column and pd.notna(row[schema.flag_column]):
             flag_value = row[schema.flag_column]
             flag_message = FLAG_DESCRIPTIONS.get(flag_value, f"Flagged: `{flag_value}`")
             if flag_message:
