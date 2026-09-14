@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
 import pandas as pd
@@ -446,14 +447,30 @@ def main() -> None:
 
     with status_col:
         st.caption("Row")
-        badge = ":green[Reviewed]" if is_reviewed else ":blue[Not yet reviewed]"
-        status_line = f"**{row_idx + 1} / {total_rows}** &middot; sample `{row_id}` &middot; {badge}"
-        if len(filtered) != total_rows and row_idx in filtered:
+        # Built as real HTML throughout (not Streamlit markdown syntax like
+        # **bold**/:green[...]) — those extensions aren't applied inside a
+        # raw HTML block, so mixing them in here would print the literal
+        # "**"/"`"/":green[...]" characters instead of styling anything.
+        badge_color = "#2e7d32" if is_reviewed else "#1565c0"
+        badge_text = "Reviewed" if is_reviewed else "Not yet reviewed"
+        status_html = (
+            f"<strong>{row_idx + 1} / {total_rows}</strong> &middot; sample "
+            f"<code>{html.escape(str(row_id))}</code> &middot; "
+            f"<span style='color:{badge_color}'>{badge_text}</span>"
+        )
+        if len(filtered) != total_rows:
             filter_parts = [p for p in (nav_mode.lower() if nav_mode != "All" else None, outlier_desc) if p]
-            status_line += (
-                f"  \n{' + '.join(filter_parts)}: {filtered.index(row_idx) + 1} / {len(filtered)}"
-            )
-        st.markdown(f'<div style="text-align:right">{status_line}</div>', unsafe_allow_html=True)
+            filter_label = html.escape(" + ".join(filter_parts) if filter_parts else "filter")
+            if row_idx in filtered:
+                match_text = f"{filter_label}: {filtered.index(row_idx) + 1} / {len(filtered)}"
+            else:
+                # Active filter, but the row on screen isn't one of the matches
+                # (e.g. it was just turned on) — say so explicitly instead of
+                # silently showing nothing, which reads as "filter did nothing".
+                plural = "es" if len(filtered) != 1 else ""
+                match_text = f"{filter_label}: {len(filtered)} match{plural} (current row not included)"
+            status_html += f"<br><span style='color:#888'>{match_text}</span>"
+        st.markdown(f'<div style="text-align:right">{status_html}</div>', unsafe_allow_html=True)
 
     if not filtered:
         st.info("No rows match the current filter.")
