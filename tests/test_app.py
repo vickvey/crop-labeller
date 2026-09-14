@@ -92,6 +92,61 @@ def test_confidence_outlier_filter_restricts_navigation():
         assert buttons["Next ➡"].disabled
 
 
+def test_sidebar_shows_class_balance_and_flagged_count():
+    df = pd.DataFrame(
+        {
+            "sample_id": list(range(1, 6)),
+            "label": [1, 1, 0, 0, 0],
+            "class_name": ["wheat", "wheat", "non_wheat", "non_wheat", "non_wheat"],
+            "region": ["Punjab"] * 5,
+            "year": [2021] * 5,
+            "NDVI_1": [0.1] * 5,
+            "flag": ["ok", "labeled_wheat_atypical_profile", "ok", "ok", "ok"],
+        }
+    )
+    with temp_input_csv("zzz_test_sidebar_summary.csv", df):
+        at = AppTest.from_file(str(APP_PATH))
+        at.run(timeout=30)
+        _select(at, "zzz_test_sidebar_summary.csv")
+
+        assert not at.exception
+        sidebar_text = " ".join(m.value for m in at.sidebar.markdown)
+        assert "wheat" in sidebar_text and "2" in sidebar_text
+        assert "non_wheat" in sidebar_text and "3" in sidebar_text
+        assert any("1 row flagged" in c.value for c in at.sidebar.caption)
+
+
+def test_unsaved_change_indicator_appears_and_clears_on_save():
+    # Two label values must exist in the file for "1" to be a selectable
+    # option on row 1 at all (label_options() is derived from the data).
+    df = pd.DataFrame(
+        {
+            "sample_id": [1, 2],
+            "label": [0, 1],
+            "region": ["Punjab"] * 2,
+            "year": [2021] * 2,
+            "NDVI_1": [0.1, 0.1],
+            "NDVI_2": [0.2, 0.2],
+        }
+    )
+    with temp_input_csv("zzz_test_unsaved_indicator.csv", df):
+        at = AppTest.from_file(str(APP_PATH))
+        at.run(timeout=30)
+        _select(at, "zzz_test_unsaved_indicator.csv")
+
+        assert not any("Unsaved change" in c.value for c in at.caption)
+
+        label_radio = [r for r in at.radio if r.label == "Label"][0]
+        label_radio.set_value(1).run(timeout=30)
+        assert not at.exception
+        assert any("Unsaved change" in c.value for c in at.caption)
+
+        save_btn = [b for b in at.button if "Save" in b.label][0]
+        save_btn.click().run(timeout=30)
+        assert not at.exception
+        assert not any("Unsaved change" in c.value for c in at.caption)
+
+
 def test_nan_confidence_and_flag_are_hidden_not_shown_as_nan():
     df = pd.DataFrame(
         {

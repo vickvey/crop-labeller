@@ -357,6 +357,18 @@ def main() -> None:
     )
     st.sidebar.progress(fraction)
 
+    # --- Sidebar: what's actually in this file, at a glance ---
+    st.sidebar.subheader("This file")
+    label_counts = df[schema.label_column].value_counts()
+    st.sidebar.markdown(
+        "  \n".join(f"{label_display(schema, val)}: **{count}**" for val, count in label_counts.items())
+    )
+    if schema.flag_column:
+        flag_col = df[schema.flag_column]
+        flagged = int((flag_col.notna() & (flag_col != "ok")).sum())
+        if flagged:
+            st.sidebar.caption(f"⚠️ {flagged} row{'s' if flagged != 1 else ''} flagged by outlier scoring")
+
     # --- Navigation state ---
     row_idx = st.session_state.get("row_idx", 0)
     row_idx = max(0, min(row_idx, total_rows - 1))
@@ -513,7 +525,13 @@ def main() -> None:
     plot_col, review_col = st.columns([2.8, 1])
     with plot_col:
         render_ndvi_plot(row, schema, row_id, reference_df)
-        if region_value is not None and year_value is not None and reference_df is None:
+        if reference_df is not None:
+            n_samples = int(reference_df["n_samples"].iloc[0])
+            # A reference built from a handful of samples is much noisier
+            # than one from thousands — worth knowing before trusting the band.
+            confidence_note = " (small sample — treat with caution)" if n_samples < 1000 else ""
+            st.caption(f"Reference: {region_value} {year_value} · {n_samples} wheat samples{confidence_note}")
+        elif region_value is not None and year_value is not None:
             st.caption(f"No reference available for {region_value} ({year_value}).")
         with st.expander("Other fields"):
             render_metadata_panel(row, schema)
@@ -554,6 +572,14 @@ def main() -> None:
             key=f"comment_{row_id}",
             height=70,
         )
+
+        if chosen_label != default_label or comment != default_comment:
+            # The label/comment widgets remember whatever was last typed for
+            # this row even after navigating away without saving (Streamlit
+            # keeps widget state by key) - without this, that looks identical
+            # to a properly saved edit until you notice the badge above still
+            # says "Not yet reviewed".
+            st.caption("🖊️ Unsaved change — click Save to keep it.")
 
         prev_btn_col, next_btn_col = st.columns(2)
         with prev_btn_col:
