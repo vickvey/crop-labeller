@@ -403,12 +403,30 @@ def main() -> None:
     row_id = row[schema.id_column]
     is_reviewed = state.is_reviewed(row_id)
 
-    # --- Compact top bar: Show-filter, confidence-outlier filter, and row
-    # status spread left/middle/right, one line, no scrolling needed to
-    # reach it. Previous/Next/Save/Jump-to-row live further down, right next
-    # to the plot and label controls, since that's where your eyes and
-    # mouse already are while reviewing a row. ---
-    mode_col, outlier_col, status_col = st.columns([1.2, 1.6, 1.8])
+    # --- Top bar, two rows:
+    #   Row 1: Show-filter (left) and row status (flush right), justify-
+    #          between style, one line, no scrolling needed to reach it.
+    #   Row 2: the confidence-outlier filter, narrow and left-aligned like
+    #          the Show control above it — kept on its own row since it can
+    #          grow taller (checkbox -> radio -> slider -> match count) and
+    #          would otherwise squeeze/misalign the other two.
+    # Previous/Next/Save/Jump-to-row live further down, right next to the
+    # plot and label controls, since that's where your eyes and mouse
+    # already are while reviewing a row. ---
+
+    # The confidence-filter widgets render below (row 2), but the results
+    # are needed above (row 1) for the status line — read prior state here;
+    # widgets bound to the same keys further down just reflect it back.
+    outlier_row_ids: set | None = None
+    outlier_desc: str | None = None
+    outlier_enabled = bool(schema.confidence_column) and st.session_state.get("outlier_filter_enabled", False)
+    if outlier_enabled:
+        pct_now = st.session_state.get("outlier_pct", 10)
+        pop_now = st.session_state.get("outlier_population", 1)
+        outlier_row_ids, _, _ = outlier_row_ids_for_percentile(df, schema, pop_now, pct_now)
+        outlier_desc = f"bottom {pct_now}% ({label_display(schema, pop_now)})"
+
+    mode_col, status_col = st.columns([1.3, 2.3])
     with mode_col:
         st.caption("Show")
         nav_mode = st.radio(
@@ -419,40 +437,6 @@ def main() -> None:
             label_visibility="collapsed",
         )
 
-    outlier_row_ids: set | None = None
-    outlier_desc: str | None = None
-    if schema.confidence_column:
-        with outlier_col:
-            st.caption("Confidence")
-            enabled_now = st.session_state.get("outlier_filter_enabled", False)
-            pct_now = st.session_state.get("outlier_pct", 10)
-            pop_now = st.session_state.get("outlier_population", 1)
-            popover_label = "🎯 Confidence filter"
-            if enabled_now:
-                popover_label += f" · bottom {pct_now}% ({label_display(schema, pop_now)})"
-            with st.popover(popover_label):
-                enabled = st.checkbox("Filter by confidence outliers", key="outlier_filter_enabled")
-                if enabled:
-                    population_choice = st.radio(
-                        "Among",
-                        options=sorted(label_options(schema, df), reverse=True),  # wheat (1) first
-                        format_func=lambda v: label_display(schema, v),
-                        key="outlier_population",
-                    )
-                    pct = st.slider(
-                        "Bottom percentile by confidence",
-                        min_value=1,
-                        max_value=50,
-                        value=10,
-                        key="outlier_pct",
-                    )
-                    matched_ids, matched_count, population_count = outlier_row_ids_for_percentile(
-                        df, schema, population_choice, pct
-                    )
-                    outlier_row_ids = matched_ids
-                    outlier_desc = f"bottom {pct}% ({label_display(schema, population_choice)})"
-                    st.caption(f"{matched_count} of {population_count} rows match")
-
     filtered = filtered_indices(nav_mode)
     if outlier_row_ids is not None:
         filtered = [i for i in filtered if ids[i] in outlier_row_ids]
@@ -460,7 +444,6 @@ def main() -> None:
     next_target = step(filtered, row_idx, 1)
 
     with status_col:
-        st.caption("Row")
         # Built as real HTML throughout (not Streamlit markdown syntax like
         # **bold**/:green[...]) — those extensions aren't applied inside a
         # raw HTML block, so mixing them in here would print the literal
@@ -488,6 +471,35 @@ def main() -> None:
 
     if not filtered:
         st.info("No rows match the current filter.")
+
+    # Row 2: confidence-outlier filter, narrow and left-aligned like "Show"
+    # above it, with empty space to its right rather than stretching wide.
+    if schema.confidence_column:
+        conf_col, _ = st.columns([1.3, 2.3])
+        with conf_col:
+            popover_label = "🎯 Confidence filter"
+            if outlier_enabled:
+                popover_label += f" · {outlier_desc}"
+            with st.popover(popover_label):
+                enabled = st.checkbox("Filter by confidence outliers", key="outlier_filter_enabled")
+                if enabled:
+                    population_choice = st.radio(
+                        "Among",
+                        options=sorted(label_options(schema, df), reverse=True),  # wheat (1) first
+                        format_func=lambda v: label_display(schema, v),
+                        key="outlier_population",
+                    )
+                    pct = st.slider(
+                        "Bottom percentile by confidence",
+                        min_value=1,
+                        max_value=50,
+                        value=10,
+                        key="outlier_pct",
+                    )
+                    _, matched_count, population_count = outlier_row_ids_for_percentile(
+                        df, schema, population_choice, pct
+                    )
+                    st.caption(f"{matched_count} of {population_count} rows match")
 
     # --- Plot + review controls, side by side, so both fit on screen at once. ---
     region_value = row[schema.region_column] if schema.region_column else None
