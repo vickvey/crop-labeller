@@ -275,9 +275,12 @@ def inject_css() -> None:
             font-size: 1.05rem !important;
             padding: 0.55rem 1rem !important;
         }
-        [data-testid="stButton"] { margin-top: 0.3rem; }
 
-        [data-testid="stHorizontalBlock"] { gap: 1.75rem; }
+        /* Columns sit side by side starting from the same top edge, so a
+           button (e.g. the confidence-filter popover trigger) never drifts
+           below/above a radio group or plain text in a neighboring column -
+           without this, taller columns can vertically center shorter ones. */
+        [data-testid="stHorizontalBlock"] { gap: 1.75rem; align-items: flex-start; }
         [data-testid="stVerticalBlock"] { gap: 1rem; }
 
         [data-testid="stRadio"], [data-testid="stTextArea"] { margin-bottom: 0.6rem; }
@@ -289,7 +292,6 @@ def inject_css() -> None:
 
 def main() -> None:
     inject_css()
-    st.title("🌾 Crop Labeller")
 
     # Belt-and-braces: make sure these exist even if git didn't check out an
     # empty data/csv/ (it's gitignored) or output/ was deleted by hand.
@@ -298,6 +300,7 @@ def main() -> None:
 
     csv_files = list_csv_files(DATA_DIR)
     if not csv_files:
+        st.title("🌾 Crop Labeller")
         st.warning(f"No CSV files found in `{DATA_DIR}`. Add one and reload the page.")
         return
 
@@ -309,7 +312,18 @@ def main() -> None:
         chosen = st.sidebar.selectbox("Input CSV", names, key="selected_csv_name")
         selected_path = DATA_DIR / chosen
 
-    st.caption(f"📄 Working on **`{selected_path.name}`**")
+    # Title and "which file" share one row (title left, filename flush
+    # right) instead of stacking, to reclaim a full line of vertical space.
+    title_col, file_col = st.columns([2, 3])
+    with title_col:
+        st.title("🌾 Crop Labeller")
+    with file_col:
+        st.markdown(
+            '<div style="text-align:right; padding-top:1.3rem; font-size:1.3rem;">'
+            f"📄 Working on <strong><code>{html.escape(selected_path.name)}</code></strong>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
     if st.session_state.get("_active_csv") != selected_path.name:
         st.session_state["_active_csv"] = selected_path.name
