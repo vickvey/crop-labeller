@@ -1,4 +1,4 @@
-from crop_labeller.data import label_display, label_options, load_csv
+from crop_labeller.data import label_display, label_options, list_csv_files, load_csv
 
 
 def test_load_csv_detects_schema(sample_csv):
@@ -35,6 +35,21 @@ def test_label_options_and_display(sample_csv):
     assert label_options(schema, df) == [0, 1]
     assert label_display(schema, 1) == "1 (wheat)"
     assert label_display(schema, 0) == "0 (non_wheat)"
+
+
+def test_list_csv_files_excludes_confidence_summary_reports(tmp_path):
+    import pandas as pd
+
+    pd.DataFrame({"sample_id": [1], "label": [1], "NDVI_1": [0.1]}).to_csv(
+        tmp_path / "Punjab_wheat_2021_outlier.csv", index=False
+    )
+    pd.DataFrame({"region": ["Punjab"], "total_samples": [9985]}).to_csv(
+        tmp_path / "confidence_check_summary_wheat.csv", index=False
+    )
+
+    files = list_csv_files(tmp_path)
+
+    assert [p.name for p in files] == ["Punjab_wheat_2021_outlier.csv"]
 
 
 def test_load_csv_without_id_column_falls_back(tmp_path):

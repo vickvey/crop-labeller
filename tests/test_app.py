@@ -1,8 +1,8 @@
 """End-to-end checks that the app degrades gracefully on bad/edge-case input.
 
-These write temp files directly into the project's real data/csv/ (the
-app's DATA_DIR is a hardcoded project-relative path, not injectable), and
-always clean up afterwards even if an assertion fails.
+These write temp files directly into the project's real data/ (the app's
+DATA_DIR is a hardcoded project-relative path, not injectable), and always
+clean up afterwards even if an assertion fails.
 """
 
 from __future__ import annotations
@@ -11,11 +11,10 @@ import contextlib
 from pathlib import Path
 
 import pandas as pd
-import pytest
 from streamlit.testing.v1 import AppTest
 
 APP_PATH = Path(__file__).resolve().parents[1] / "src" / "crop_labeller" / "app.py"
-DATA_CSV_DIR = Path(__file__).resolve().parents[1] / "data" / "csv"
+DATA_CSV_DIR = Path(__file__).resolve().parents[1] / "data"
 
 
 @contextlib.contextmanager

@@ -14,11 +14,11 @@ from crop_labeller.reference import load_region_reference
 from crop_labeller.state import ReviewState, write_outputs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# Input CSVs live under data/csv/ — data/ also holds plots/ (diagnostic PNGs
-# from the outlier-scoring pipeline) and a confidence_check_summary_*.csv
-# that aren't per-row datapoint files, so we scan the csv/ subfolder
-# specifically rather than data/ itself.
-DATA_DIR = PROJECT_ROOT / "data" / "csv"
+# Researchers drop their assigned CSV(s) straight into data/. That folder
+# may also hold plots/ (diagnostic PNGs from the outlier-scoring pipeline)
+# and a confidence_check_summary_*.csv report - list_csv_files() ignores
+# the latter by name, and glob("*.csv") never descends into plots/.
+DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 
 # Human-readable explanations for the outlier-scoring pipeline's flag values.

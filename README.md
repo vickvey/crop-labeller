@@ -30,7 +30,7 @@ uv sync
 
 ## 3. Add input data
 
-Place one or more CSV files in the `data/csv/` directory. Each CSV is
+Place one or more CSV files directly in the `data/` directory. Each CSV is
 expected to have:
 
 - A set of `NDVI_1, NDVI_2, ..., NDVI_n` columns (the time series).
@@ -49,8 +49,10 @@ treatment automatically, if present:
   outlier/label-confidence scoring pipeline. Shown as a confidence badge and
   a warning banner explaining what looks off, to help prioritize review.
 
-`data/` also holds `plots/` (diagnostic PNGs from that scoring pipeline)
-and a `confidence_check_summary_*.csv`; neither is read by the app.
+`data/` may also hold `plots/` (diagnostic PNGs from that scoring pipeline)
+and a `confidence_check_summary_*.csv` report; the app ignores both — it
+never offers a `confidence_check_summary_*.csv` as something to review,
+and only ever looks at files directly in `data/`, not subfolders.
 
 ## 4. Run the app
 
@@ -66,7 +68,7 @@ no internet connection or external service is used.
 
 ## 5. Using the labelling interface
 
-1. If `data/csv/` contains more than one CSV, pick one from the sidebar.
+1. If `data/` contains more than one CSV, pick one from the sidebar.
 2. Each screen shows one row: an interactive NDVI time-series plot,
    contextual fields (region, coordinates, etc.), and the current label.
 3. Pick the correct label and optionally add a comment (e.g. for
@@ -79,8 +81,8 @@ no internet connection or external service is used.
 
 ## 6. Outputs
 
-Nothing is ever written to the original file in `data/csv/`. For an input
-file `data/csv/<name>.csv`, the app writes to `output/`:
+Nothing is ever written to the original file in `data/`. For an input file
+`data/<name>.csv`, the app writes to `output/`:
 
 - **`<name>_labelled.csv`** — a full copy of the input with the same
   columns/order, with reviewed rows' labels updated in place.
@@ -97,8 +99,7 @@ state is not merged automatically.
 
 ```text
 crop-labeller/
-├── data/
-│   └── csv/                 # input CSVs (not modified by the app)
+├── data/                     # input CSVs go directly here (not modified by the app)
 ├── reference/                # precomputed regional mean/std NDVI curves
 ├── output/                  # generated labelled CSVs + review metadata
 ├── scripts/                 # offline/dev tools (e.g. build reference curves)

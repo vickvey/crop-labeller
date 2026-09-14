@@ -67,10 +67,20 @@ class CsvSchema:
     "labeled_nonwheat_wheatlike_profile"), if present."""
 
 
+# Filenames that sit alongside input CSVs (e.g. directly under data/) but
+# are reports from the outlier-scoring pipeline, not per-row datapoints to
+# review, so they must never be offered as an input CSV to pick from.
+NON_INPUT_FILENAME_PREFIXES = ("confidence_check_summary",)
+
+
 def list_csv_files(data_dir: Path) -> list[Path]:
     if not data_dir.exists():
         return []
-    return sorted(p for p in data_dir.glob("*.csv") if p.is_file())
+    return sorted(
+        p
+        for p in data_dir.glob("*.csv")
+        if p.is_file() and not p.name.startswith(NON_INPUT_FILENAME_PREFIXES)
+    )
 
 
 def _first_present(columns: list[str], candidates: tuple[str, ...]) -> str | None:
