@@ -1,6 +1,7 @@
-# Builds the offline Windows packages, smoke-tests each one on a real Windows
-# machine, and (for a v* tag) publishes them as a GitHub release. See README,
-# "Releasing".
+# Builds the offline Windows packages and smoke-tests each one on a real Windows
+# machine; smoke-tests the source installs (pip + requirements.txt, and uv) on
+# Windows/macOS/Linux; and, for a v* tag, publishes the release only if every
+# check passed. See README, "Releasing".
 name: offline-packages
 
 on:
@@ -71,10 +72,50 @@ jobs:
           $args_ = @("C:\t\crop-labeller")
           if ("${{ matrix.install }}" -eq "auto") { $args_ += @("--install-python", "auto") }
           if ("${{ matrix.install }}" -eq "path") { $args_ += @("--install-python", (Get-Command python).Source) }
-          python scripts/smoke_test_bundle.py @args_
+          python scripts/smoke_test_install.py @args_
+
+  # USAGE-GUIDELINES Option D: clone, venv, `pip install -r requirements.txt`, `python run.py`.
+  source-pip:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        python: ["3.10", "3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: venv + pip install -r requirements.txt
+        shell: bash
+        run: |
+          python -m venv .venv
+          if [ -x .venv/Scripts/python.exe ]; then VPY=.venv/Scripts/python.exe; else VPY=.venv/bin/python; fi
+          "$VPY" -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Smoke test (python run.py)
+        run: python scripts/smoke_test_install.py .
+
+  # USAGE-GUIDELINES Option C: `uv run run.py` (uv creates .venv from uv.lock).
+  source-uv:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: uv sync (what `uv run run.py` does first)
+        run: uv sync --no-dev
+      - name: Smoke test (.venv from uv, python run.py)
+        run: python scripts/smoke_test_install.py .
 
   release:
-    needs: smoke-windows
+    needs: [smoke-windows, source-pip, source-uv]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

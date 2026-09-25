@@ -84,6 +84,21 @@ http://localhost:8501). Everything runs on your machine — no internet
 connection or external service is used. `uv run crop-labeller` is
 equivalent.
 
+**Without `uv`:** plain pip works too, with Python ≥ 3.10.
+`requirements.txt` is the pinned dependency set exported from `uv.lock`,
+and `run.py` puts `src/` on `sys.path` itself, so the project doesn't need
+to be installed:
+
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt     # Windows: .venv\Scripts\python ...
+.venv/bin/python run.py
+```
+
+Any environment with `streamlit>=1.38`, `pandas>=2.2` and `plotly>=5.24`
+works (conda, Poetry, offline wheels, and so on). See
+[USAGE-GUIDELINES.md, Option D](USAGE-GUIDELINES.md#option-d--from-the-source-code-your-own-way-any-computer).
+
 ## 5. Using the labelling interface
 
 1. If `data/` contains more than one CSV, pick one from the sidebar. The
@@ -189,7 +204,7 @@ To test locally, build the Linux equivalents and smoke-test an extracted copy:
 
 ```bash
 uv run python scripts/build_offline_bundle.py --platform linux --allow-dirty
-unzip -q dist/crop-labeller-*-linux-offline.zip -d /tmp/t && python3 scripts/smoke_test_bundle.py /tmp/t/crop-labeller
+unzip -q dist/crop-labeller-*-linux-offline.zip -d /tmp/t && python3 scripts/smoke_test_install.py /tmp/t/crop-labeller
 ```
 
 ## Releasing
@@ -200,11 +215,15 @@ and on tags:
 1. Runs the tests on Python 3.12.
 2. Builds both Windows zips on Linux.
 3. On a **real Windows runner**, extracts each zip with `Expand-Archive` and
-   runs `scripts/smoke_test_bundle.py` against it. For own-python, this
+   runs `scripts/smoke_test_install.py` against it. For own-python, this
    covers both the installer's auto-detection and an explicit `python.exe`
    path. The test renders the app on a sample CSV and starts
    `start-crop-labeller.bat` until the server answers its health check.
-4. **For a `v*` tag only**, and only if every smoke test passed, publishes a
+4. Tests the source installs the same way, with `python run.py`:
+   - Option D (venv + `pip install -r requirements.txt`) on Windows, macOS
+     and Linux, with Python 3.10, 3.12 and 3.14.
+   - Option C (`uv`) on Windows and macOS.
+5. **For a `v*` tag only**, and only if all of the above passed, publishes a
    GitHub release with the zips, `SHA256SUMS.txt` and
    `packaging/release-notes.md`.
 
@@ -212,7 +231,8 @@ To cut a release:
 
 ```bash
 # bump `version` in pyproject.toml, then:
-uv lock && git commit -am "Release vX.Y.Z" && git tag vX.Y.Z && git push origin main vX.Y.Z
+uv lock && git commit -am "Release vX.Y.Z" && git push origin main
+git tag -a vX.Y.Z -m "Crop Labeller X.Y.Z" && git push origin vX.Y.Z   # separately: a combined push didn't trigger the tag run
 ```
 
 The workflow fails if the tag doesn't match `pyproject.toml`'s version.
@@ -224,11 +244,14 @@ uv run pytest
 ```
 
 After editing `USAGE-GUIDELINES.md`, regenerate the PDF that ships next to it
-(and in the offline bundle). It uses [md-to-pdf](https://github.com/simonhaenisch/md-to-pdf),
+(and in the offline zips). It uses [md-to-pdf](https://github.com/simonhaenisch/md-to-pdf),
 which renders through headless Chrome:
 
 ```bash
-npx md-to-pdf --config-file scripts/pdf/md-to-pdf.config.cjs USAGE-GUIDELINES.md
-# if its bundled Chrome won't start, point it at an installed one:
-PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome npx md-to-pdf --config-file scripts/pdf/md-to-pdf.config.cjs USAGE-GUIDELINES.md
+scripts/pdf/build-usage-pdf.sh
 ```
+
+The script uses an installed Chrome/Chromium if it finds one, and fails if
+the PDF wasn't actually rewritten. Don't call `md-to-pdf` directly from a
+pipe or script: it reads stdin first, and then either hangs or writes the
+PDF to stdout instead of the file.

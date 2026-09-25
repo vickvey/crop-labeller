@@ -1,5 +1,5 @@
-// Config for regenerating USAGE-GUIDELINES.pdf (see README, "Development"):
-//   npx md-to-pdf --config-file scripts/pdf/md-to-pdf.config.cjs USAGE-GUIDELINES.md
+// Config for regenerating USAGE-GUIDELINES.pdf. Use the wrapper (see README, "Development"):
+//   scripts/pdf/build-usage-pdf.sh
 const path = require("path");
 
 module.exports = {

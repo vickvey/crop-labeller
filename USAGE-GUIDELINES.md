@@ -20,10 +20,21 @@ to most involved.
 | **Windows** (with or without internet) | **[Option A — Ready-made package](#option-a--ready-made-package-windows-recommended)** (recommended) | Unzip, then double-click. Nothing to install; Python is built in. |
 | **Windows** that must use its **own** Python 3.12 | [Option B — Your own Python](#option-b--your-own-python-312-windows) | Unzip, then double-click an installer once. |
 | **Mac**, or you already use `uv` | [Option C — Install with `uv`](#option-c--install-with-uv-mac-or-any-computer-with-internet) | Needs internet. Install `uv`, then type one command. |
+| **Any computer**, if you're comfortable with Python and prefer no ready-made zip | [Option D — From the source code, your own way](#option-d--from-the-source-code-your-own-way-any-computer) | Get the code, make a virtual environment, `pip install -r requirements.txt`, `python run.py`. |
 
 Options A and B work on computers with **no internet at all**. You only
 need internet somewhere to download the zip, which you can then copy over,
-e.g. on a USB drive.
+e.g. on a USB drive. Option D can work offline too, if you bring your own
+package files.
+
+> **Are the zips safe?** Yes. GitHub builds them automatically from this
+> project's public source code, and each one is tested on Windows before it
+> is published. They contain only the app, a standard Python (the same
+> builds the `uv` tool uses), and the usual open-source packages from PyPI
+> (Streamlit, pandas, Plotly and their dependencies). `SHA256SUMS.txt` on
+> the download page lets you check a copy wasn't changed on the way.
+> If your IT rules still don't allow running a downloaded package, use
+> **Option D**: you install everything yourself from the source code.
 
 ---
 
@@ -139,6 +150,57 @@ so you don't need to install Python separately. It needs internet.
 **That's all the setup.** Go to
 [Section 3](#3-every-time-you-want-to-review-data).
 
+### Option D — From the source code, your own way (any computer)
+
+The traditional Python way, with no ready-made package. You need **Python
+3.10 or newer** (64-bit), and either internet access for `pip` or your own
+package files (see "Offline" below). Windows commands are shown first, then
+Mac/Linux.
+
+1. **Get the code**, whichever way you like:
+   - `git clone https://github.com/vickvey/crop-labeller.git`
+   - or **Code → Download ZIP** on <https://github.com/vickvey/crop-labeller>
+   - or **Source code (zip)** under a release on
+     <https://github.com/vickvey/crop-labeller/releases>
+
+   Then open a terminal in the `crop-labeller` folder, e.g. `cd crop-labeller`.
+2. **Create a virtual environment** (or use any environment you prefer):
+
+   ```
+   py -m venv .venv                  # Windows
+   python3 -m venv .venv             # Mac / Linux
+   ```
+3. **Install the packages:**
+
+   ```
+   .venv\Scripts\python -m pip install -r requirements.txt     # Windows
+   .venv/bin/python -m pip install -r requirements.txt         # Mac / Linux
+   ```
+
+   `requirements.txt` pins the exact versions the app is tested with, for
+   Python 3.10 and newer. If you prefer to activate the environment first
+   (`.venv\Scripts\activate` on Windows, `source .venv/bin/activate` on
+   Mac/Linux), plain `python` and `pip` work too.
+
+**That's all the setup.** Go to
+[Section 3](#3-every-time-you-want-to-review-data).
+
+**Offline, with your own package files:** download the wheels (`.whl`
+files) on a computer with internet. Run
+`pip download -r requirements.txt -d wheels` there. If that computer's
+Python version or operating system differs from the offline one, add e.g.
+`--only-binary=:all: --python-version 3.12 --platform win_amd64` to match
+it. Copy the `wheels` folder over,
+then install with `pip install --no-index --find-links wheels -r requirements.txt`.
+If your wheels are different versions from the pinned ones, install by name
+instead: `pip install --no-index --find-links wheels streamlit pandas plotly`.
+
+**Your own tools are fine.** conda, Poetry, `uv pip`, a shared lab
+environment and so on all work. The app only needs `streamlit` ≥ 1.38,
+`pandas` ≥ 2.2 and `plotly` ≥ 5.24 installed. Then run `python run.py`
+from the `crop-labeller` folder. There's nothing to install for the app
+itself.
+
 ---
 
 ## 3. Every time you want to review data
@@ -176,6 +238,16 @@ uv run run.py
 
 The first time, this takes a minute or two while it installs everything
 the app needs. After that it starts in a few seconds.
+
+**Option D (source code):** in a terminal in the `crop-labeller` folder,
+run the app with your environment's Python:
+
+```
+.venv\Scripts\python run.py      # Windows
+.venv/bin/python run.py          # Mac / Linux
+```
+
+(or just `python run.py` if the environment is activated).
 
 **Either way**, a browser tab opens with the app a few seconds later. If
 it doesn't, look in the black/terminal window for a line like
