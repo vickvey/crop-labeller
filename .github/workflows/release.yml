@@ -1,0 +1,94 @@
+# Builds the offline Windows packages, smoke-tests each one on a real Windows
+# machine, and (for a v* tag) publishes them as a GitHub release. See README,
+# "Releasing".
+name: offline-packages
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Tests (Python 3.12)
+        run: uv run --python 3.12 pytest -q
+      - name: Tag matches pyproject version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(uv run --no-project python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != pyproject version $version"; exit 1; }
+      - name: Build Windows packages
+        run: uv run python scripts/build_offline_bundle.py --platform windows
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-packages
+          path: dist/
+          if-no-files-found: error
+
+  smoke-windows:
+    needs: build
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: bundled, zip: offline, install: "" }
+          # installer finds Python 3.12 by itself (py launcher / PATH)
+          - { variant: own-python-auto, zip: offline-own-python, install: auto }
+          # installer given an explicit python.exe path
+          - { variant: own-python-path, zip: offline-own-python, install: path }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-packages
+          path: dist
+      - name: Verify checksums
+        shell: bash
+        run: cd dist && sha256sum -c SHA256SUMS.txt
+      - name: Extract (Expand-Archive, like Explorer's "Extract All")
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Filter "crop-labeller-*-windows-${{ matrix.zip }}.zip"
+          Expand-Archive -Path $zip.FullName -DestinationPath C:\t
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $args_ = @("C:\t\crop-labeller")
+          if ("${{ matrix.install }}" -eq "auto") { $args_ += @("--install-python", "auto") }
+          if ("${{ matrix.install }}" -eq "path") { $args_ += @("--install-python", (Get-Command python).Source) }
+          python scripts/smoke_test_bundle.py @args_
+
+  release:
+    needs: smoke-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-packages
+          path: dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "Crop Labeller ${GITHUB_REF_NAME#v}" \
+            --notes-file packaging/release-notes.md

@@ -26,6 +26,10 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 See https://docs.astral.sh/uv/getting-started/installation/ for other options.
 No manual Python install or virtualenv setup is needed — `uv` handles both.
 
+> **Offline machine (no internet, so no `uv`)?** Use the Windows zips from
+> the latest release: one has Python built in, the other installs into your
+> own Python 3.12. See [Offline install](#offline-install-no-uv) below.
+
 ## 2. Get the code
 
 ```bash
@@ -126,17 +130,105 @@ crop-labeller/
 ├── data/                     # input CSVs go directly here (not modified by the app)
 ├── reference/                # precomputed regional mean/std NDVI curves
 ├── output/                   # generated labelled CSVs + review metadata
-├── scripts/                  # offline/dev tools (e.g. build reference curves)
+├── .github/workflows/        # builds, Windows-tests and releases the offline zips
+├── packaging/                # launchers + release notes for the offline zips
+├── scripts/                  # dev tools: reference curves, offline zips, smoke test, PDF
 ├── src/crop_labeller/        # app source
 ├── tests/                    # pytest tests
 ├── pyproject.toml
-├── run.py                    # `uv run run.py` launches the app
+├── requirements.txt          # pinned deps (exported from uv.lock) for offline pip installs
+├── run.py                    # `uv run run.py` (or `python run.py`) launches the app
 ├── README.md                 # this file (technical/setup reference)
 └── USAGE-GUIDELINES.md       # step-by-step guide for researchers
 ```
+
+## Offline install (no `uv`)
+
+For air-gapped Windows machines, each
+[GitHub release](https://github.com/vickvey/crop-labeller/releases) has two zips:
+
+- **`crop-labeller-<version>-windows-offline.zip`** (recommended): the app
+  plus a private Python 3.12 (python-build-standalone) with every dependency
+  preinstalled. Unzip it and double-click `start-crop-labeller.bat`. There's
+  no install step, and whatever Python the machine has doesn't matter.
+- **`crop-labeller-<version>-windows-offline-own-python.zip`**: the app plus a
+  `wheelhouse/` of the exact pinned `cp312-win_amd64` wheels, for machines
+  that must use their own Python 3.12. `install-with-own-python.bat [path\to\python.exe]`
+  builds a `.venv` and installs offline. After that, `start-crop-labeller.bat`
+  runs the app. The launcher uses `python\` if present, else `.venv\`.
+
+The researcher-facing steps, including fully manual pip/uv commands, are in
+[USAGE-GUIDELINES.md §8](USAGE-GUIDELINES.md#8-offline-computers-no-internet-no-uv).
+
+`scripts/build_offline_bundle.py` builds both zips. It:
+
+- **Refuses to build from uncommitted changes**, and takes the app files from
+  `git archive HEAD`, so the commit recorded in each zip's `VERSION.txt` is
+  exactly what's inside. `--allow-dirty` is for local testing only, and marks
+  the build "TEST BUILD, not for release".
+- **Refuses if `requirements.txt` is out of date with `uv.lock`.** Regenerate
+  it with
+  `uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -o requirements.txt`.
+- **Resolves dependencies for the *target* platform.** Plain
+  `pip download --platform` evaluates markers like `sys_platform == 'win32'`
+  against the build host, which silently drops Windows-only deps such as
+  `tzdata`.
+- **Refuses any path in the zip over 140 characters**, because Windows'
+  260-character `MAX_PATH` breaks Explorer's "Extract All". It also refuses
+  filenames with spaces.
+- **Writes `dist/SHA256SUMS.txt`.**
+
+Some pieces apply however the app is launched. `run.py` puts `src/` on
+`sys.path` itself, so the project never has to be pip-installed (that would
+need `hatchling` offline). `crop_labeller/launcher.py` turns off Streamlit's
+first-run email prompt, which otherwise blocks a fresh machine at `Email:`,
+and usage stats. It also binds to `localhost`, so there's no Windows Firewall
+popup.
+
+To test locally, build the Linux equivalents and smoke-test an extracted copy:
+
+```bash
+uv run python scripts/build_offline_bundle.py --platform linux --allow-dirty
+unzip -q dist/crop-labeller-*-linux-offline.zip -d /tmp/t && python3 scripts/smoke_test_bundle.py /tmp/t/crop-labeller
+```
+
+## Releasing
+
+The `offline-packages` GitHub Actions workflow runs on every push to `main`
+and on tags:
+
+1. Runs the tests on Python 3.12.
+2. Builds both Windows zips on Linux.
+3. On a **real Windows runner**, extracts each zip with `Expand-Archive` and
+   runs `scripts/smoke_test_bundle.py` against it. For own-python, this
+   covers both the installer's auto-detection and an explicit `python.exe`
+   path. The test renders the app on a sample CSV and starts
+   `start-crop-labeller.bat` until the server answers its health check.
+4. **For a `v*` tag only**, and only if every smoke test passed, publishes a
+   GitHub release with the zips, `SHA256SUMS.txt` and
+   `packaging/release-notes.md`.
+
+To cut a release:
+
+```bash
+# bump `version` in pyproject.toml, then:
+uv lock && git commit -am "Release vX.Y.Z" && git tag vX.Y.Z && git push origin main vX.Y.Z
+```
+
+The workflow fails if the tag doesn't match `pyproject.toml`'s version.
 
 ## Development
 
 ```bash
 uv run pytest
+```
+
+After editing `USAGE-GUIDELINES.md`, regenerate the PDF that ships next to it
+(and in the offline bundle). It uses [md-to-pdf](https://github.com/simonhaenisch/md-to-pdf),
+which renders through headless Chrome:
+
+```bash
+npx md-to-pdf --config-file scripts/pdf/md-to-pdf.config.cjs USAGE-GUIDELINES.md
+# if its bundled Chrome won't start, point it at an installed one:
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome npx md-to-pdf --config-file scripts/pdf/md-to-pdf.config.cjs USAGE-GUIDELINES.md
 ```

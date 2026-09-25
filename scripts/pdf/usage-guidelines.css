@@ -1,0 +1,24 @@
+/* Print styling for USAGE-GUIDELINES.pdf (md-to-pdf, headless Chrome). */
+html { font-size: 10.5pt; }
+body {
+  font-family: "Inter", "Segoe UI", "Noto Sans", "Helvetica Neue", Arial, sans-serif, "Noto Color Emoji";
+  line-height: 1.55;
+  color: #1f2328;
+}
+h1 { font-size: 2em; border-bottom: 2px solid #2f7d32; padding-bottom: .25em; margin-top: 0; }
+h2 { font-size: 1.45em; border-bottom: 1px solid #d0d7de; padding-bottom: .2em; margin-top: 1.6em; break-before: auto; }
+h3 { font-size: 1.15em; margin-top: 1.3em; }
+h2, h3 { break-after: avoid; }
+p, li { orphans: 3; widows: 3; }
+pre, blockquote, table, img { break-inside: avoid; }
+code { font-family: "JetBrains Mono", "Cascadia Mono", "DejaVu Sans Mono", monospace; font-size: .9em;
+       background: #f3f4f6; padding: .1em .35em; border-radius: 4px; }
+pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: .7em 1em;
+      white-space: pre-wrap; overflow-wrap: anywhere; }
+pre code { background: none; padding: 0; font-size: .92em; }
+blockquote { border-left: 4px solid #2f7d32; background: #f2f9f2; color: #1f2328; margin: 1em 0; padding: .5em 1em; }
+blockquote p { margin: .3em 0; }
+a { color: #0b61c4; text-decoration: none; }
+hr { border: 0; border-top: 1px solid #d0d7de; margin: 1.8em 0; }
+table { border-collapse: collapse; }
+th, td { border: 1px solid #d0d7de; padding: .35em .7em; }

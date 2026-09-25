@@ -21,6 +21,11 @@ Do this once, the first time you use the tool.
 `uv` is a small helper program that sets up everything else automatically
 (you will not need to separately install Python).
 
+> **Computer with no internet access?** Installing `uv` needs the
+> internet. Skip Sections 1 and 2 and follow
+> [Section 8 — Offline computers](#8-offline-computers-no-internet-no-uv)
+> instead. It's a ready-made package: unzip it and double-click.
+
 1. Open a terminal:
    - **Windows**: press the Start button, type `PowerShell`, and open
      **Windows PowerShell**.
@@ -269,6 +274,123 @@ help, close the terminal, reopen it in the `crop-labeller` folder, and run
 **I want to review a different file** — either remove the current CSV
 from `data/` and add the new one, or keep both in `data/` and pick the one
 you want from the dropdown that appears in the sidebar.
+
+
+---
+
+## 8. Offline computers (no internet, no `uv`)
+
+Use this if your computer can't reach the internet. There are two ready-made
+downloads. Neither needs the internet on the computer that runs it:
+
+| Download | Use it if | Setup |
+|---|---|---|
+| **`crop-labeller-<version>-windows-offline.zip`** (recommended) | You just want it to work | None. Python is built in, and it doesn't matter which Python (if any) the computer has. |
+| `crop-labeller-<version>-windows-offline-own-python.zip` | Your computer must use its **own** Python **3.12 (64-bit)** | Run `install-with-own-python.bat` once. |
+
+Both are on <https://github.com/vickvey/crop-labeller/releases/latest>
+(under **Assets**), or you can get them from whoever gave you this tool.
+
+### Getting the zip onto the computer (both downloads)
+
+1. **Download** the zip on any computer with internet, and copy it to the
+   offline computer, e.g. with a USB drive.
+2. **Unblock it.** Right-click the zip → **Properties** → at the bottom,
+   tick **Unblock** → **OK**. (If there's no Unblock box, skip this.) This
+   stops Windows from showing warnings about the files inside.
+3. **Extract it.** Right-click the zip → **Extract All...** → **Extract**.
+   The suggested location is fine. You'll get a folder containing
+   `crop-labeller`. Move that `crop-labeller` folder wherever you like, for
+   example your Documents.
+
+   Don't double-click files *inside* the zip without extracting it first.
+   It won't work from there.
+
+**With the recommended download, that's all the setup.** Skip to
+[Every time you want to review data](#every-time-you-want-to-review-data).
+
+### Only for the own-python download: one-time install
+
+Double-click **`install-with-own-python.bat`** in the `crop-labeller`
+folder. It finds your Python 3.12, creates a private `.venv` folder next to
+it, and installs the included packages (from the `wheelhouse` folder, offline).
+When it says **Setup finished**, press a key to close it. You only do this
+once, or again if you move to a different Python.
+
+If it says it **couldn't find a 64-bit Python 3.12**, give it the exact
+path. Open PowerShell in the `crop-labeller` folder (see
+[Section 2, Step 2](#step-2--open-a-terminal-right-there)) and run it with
+the full path to your `python.exe`, e.g.:
+
+```
+.\install-with-own-python.bat C:\Users\you\AppData\Local\Programs\Python\Python312\python.exe
+```
+
+(To find the path, run `py -3.12 -c "import sys; print(sys.executable)"`,
+or look at where Python was installed.)
+
+**Prefer to do it by hand?** These are the same steps as the `.bat`, run in
+PowerShell in the `crop-labeller` folder:
+
+```
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install --no-index --find-links wheelhouse -r requirements.txt
+.venv\Scripts\python run.py
+```
+
+`requirements.txt` pins the exact versions that are in `wheelhouse` and
+that the app is tested with.
+
+- **Using wheels you downloaded yourself** instead of the included
+  `wheelhouse`? Point `--find-links` at your folder, and install by name so
+  pip picks versions from what you have:
+  `.venv\Scripts\python -m pip install --no-index --find-links C:\path\to\your\wheels streamlit pandas plotly`.
+  The app needs Streamlit ≥ 1.38, pandas ≥ 2.2 and Plotly ≥ 5.24.
+- **Using `uv`** (already installed offline)? Run
+  `uv venv --python C:\path\to\python.exe`, then
+  `uv pip install --offline --no-index --find-links wheelhouse -r requirements.txt`,
+  then `.venv\Scripts\python run.py`. (Plain `uv run run.py` won't work
+  offline: it tries to download packages.)
+
+### Every time you want to review data
+
+1. Put your CSV file(s) in the `data` folder inside `crop-labeller`
+   (the same as [Section 2, Step 1](#step-1--put-your-csv-file-in-the-data-folder)).
+2. Double-click **`start-crop-labeller.bat`** in the `crop-labeller` folder.
+   A black window opens, and a few seconds later the app opens in your
+   browser.
+3. **Leave the black window open** while you work. Closing it stops the
+   app. Your saved results appear in the `output` folder, and your progress
+   is still there next time.
+
+Everything in Sections 3–5 works exactly the same. Wherever the guide says
+"run `uv run run.py`", double-click `start-crop-labeller.bat` instead.
+
+### If something goes wrong
+
+**"Windows protected your PC"** when you double-click a `.bat` → click
+**More info** → **Run anyway**. (Unblocking the zip before extracting
+prevents this.)
+
+**"Can't find python\python.exe next to this file"** → you ran it from
+inside the zip, or only copied some of the files. Extract the whole zip and
+run the `.bat` inside the extracted `crop-labeller` folder.
+
+**"Setup hasn't been run yet"** (own-python download) → double-click
+`install-with-own-python.bat` first.
+
+**The install stops with an error about a package or version** (own-python
+download) → your Python must be **3.12, 64-bit**. Check with
+`py -3.12 -c "import sys, struct; print(sys.version, struct.calcsize('P') * 8, 'bit')"`.
+If it's a different version, use the recommended download instead. It has
+its own Python.
+
+**Extracting fails with "path too long" or "file name too long"** → extract
+to a shorter place instead, e.g. type `C:\cl` as the destination in
+**Extract All**.
+
+**Which version do I have?** Open `VERSION.txt` in the `crop-labeller`
+folder, and include it if you report a problem.
 
 ---
 

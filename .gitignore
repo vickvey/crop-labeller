@@ -18,6 +18,9 @@ data/*.csv
 !data/confidence_check_summary_*.csv
 data/plots/
 
+# Offline bundle build (scripts/build_offline_bundle.py); zips go in dist/, both ignored below.
+wheelhouse/
+
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
 # Edit at https://www.toptal.com/developers/gitignore?templates=python
