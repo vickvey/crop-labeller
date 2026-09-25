@@ -158,7 +158,7 @@ For air-gapped Windows machines, each
   runs the app. The launcher uses `python\` if present, else `.venv\`.
 
 The researcher-facing steps, including fully manual pip/uv commands, are in
-[USAGE-GUIDELINES.md §8](USAGE-GUIDELINES.md#8-offline-computers-no-internet-no-uv).
+[USAGE-GUIDELINES.md §1–2](USAGE-GUIDELINES.md#1-pick-your-setup).
 
 `scripts/build_offline_bundle.py` builds both zips. It:
 

@@ -92,7 +92,7 @@ PRUNE_REL_DIRS = ["pyarrow/include", "pyarrow/src", "streamlit/.agents", "bin"]
 
 DATA_README = """\
 Put the CSV file(s) you want to review directly in this folder (not in a
-subfolder), then start the app. See USAGE-GUIDELINES.pdf, section 2.
+subfolder), then start the app. See USAGE-GUIDELINES.pdf, section 3.
 """
 
 EXPORT_CMD = ["uv", "export", "--no-dev", "--no-hashes", "--no-emit-project",

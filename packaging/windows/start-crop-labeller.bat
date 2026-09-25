@@ -1,5 +1,5 @@
 @echo off
-rem Double-click launcher for the offline Windows packages (USAGE-GUIDELINES, section 8).
+rem Double-click launcher for the offline Windows packages (USAGE-GUIDELINES, sections 2-3).
 rem Uses the bundled python\ if present, else the .venv made by install-with-own-python.bat.
 setlocal
 cd /d "%~dp0"
