@@ -592,19 +592,23 @@ def main() -> None:
             if flag_message:
                 st.warning(flag_message, icon="⚠️")
 
+        # Widget keys include the file name: keyed by row id alone, row 1 of a
+        # newly selected CSV would inherit the label/comment picked for row 1
+        # of the previous one (Streamlit keeps widget state by key).
+        widget_key = f"{selected_path.name}_{row_id}"
         chosen_label = st.radio(
             "Label",
             options=options,
             index=default_index,
             format_func=lambda v: label_display(schema, v),
-            key=f"label_{row_id}",
+            key=f"label_{widget_key}",
             horizontal=True,
         )
         inject_label_background(schema, chosen_label)
         comment = st.text_area(
             "Comment (optional)",
             value=default_comment,
-            key=f"comment_{row_id}",
+            key=f"comment_{widget_key}",
             height=70,
         )
 

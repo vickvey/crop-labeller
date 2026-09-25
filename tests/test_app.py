@@ -15,17 +15,27 @@ from streamlit.testing.v1 import AppTest
 
 APP_PATH = Path(__file__).resolve().parents[1] / "src" / "crop_labeller" / "app.py"
 DATA_CSV_DIR = Path(__file__).resolve().parents[1] / "data"
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output"
+
+
+def _remove_outputs(stem: str) -> None:
+    # Saving a review writes these into the real output/; left behind, they
+    # make the next run start from that saved state instead of a clean file.
+    for suffix in (".reviews.json", "_labelled.csv", "_review_meta.csv"):
+        (OUTPUT_DIR / f"{stem}{suffix}").unlink(missing_ok=True)
 
 
 @contextlib.contextmanager
 def temp_input_csv(filename: str, df: pd.DataFrame):
     DATA_CSV_DIR.mkdir(parents=True, exist_ok=True)
     path = DATA_CSV_DIR / filename
+    _remove_outputs(path.stem)
     df.to_csv(path, index=False)
     try:
         yield path
     finally:
         path.unlink(missing_ok=True)
+        _remove_outputs(path.stem)
 
 
 def _select(at: AppTest, filename: str) -> AppTest:
@@ -220,3 +230,32 @@ def test_nan_confidence_and_flag_are_hidden_not_shown_as_nan():
         assert not at.exception
         assert not any("confident" in m.value for m in at.markdown)
         assert not at.warning
+
+
+def test_switching_files_does_not_carry_over_unsaved_label():
+    # Same sample_id (1) in both files but opposite labels: an unsaved pick on
+    # file A's row 1 must not show up as file B's row 1 selection.
+    def make(label):
+        return pd.DataFrame(
+            {
+                "sample_id": [1, 2],
+                "label": [label, 1 - label],
+                "region": ["Punjab"] * 2,
+                "year": [2021] * 2,
+                "NDVI_1": [0.1, 0.1],
+            }
+        )
+
+    with (
+        temp_input_csv("zzz_test_switch_a.csv", make(0)),
+        temp_input_csv("zzz_test_switch_b.csv", make(0)),
+    ):
+        at = AppTest.from_file(str(APP_PATH))
+        at.run(timeout=30)
+        _select(at, "zzz_test_switch_a.csv")
+        [r for r in at.radio if r.label == "Label"][0].set_value(1).run(timeout=30)
+
+        _select(at, "zzz_test_switch_b.csv")
+        assert not at.exception
+        assert [r for r in at.radio if r.label == "Label"][0].value == 0
+        assert not any("Unsaved change" in c.value for c in at.caption)
